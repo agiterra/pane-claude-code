@@ -1,0 +1,19 @@
+{
+  "name": "@agiterra/pane-claude-code",
+  "version": "0.1.0",
+  "description": "Pane orchestration plugin for Claude Code — launch, manage, and monitor agents in screen sessions.",
+  "license": "MIT",
+  "type": "module",
+  "bin": "./server.ts",
+  "scripts": {
+    "start": "bun install --no-summary && bun server.ts"
+  },
+  "dependencies": {
+    "@agiterra/pane-tools": "agiterra/pane-tools#v0.1.0",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10"
+  },
+  "author": "Tim Garthwaite <https://github.com/mividtim>"
+}
