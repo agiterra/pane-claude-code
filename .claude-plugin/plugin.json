@@ -1,0 +1,6 @@
+{
+  "name": "pane",
+  "description": "Pane orchestration — launch and manage agents in persistent screen sessions.",
+  "version": "0.1.0",
+  "keywords": ["pane", "agent", "screen", "orchestration", "mcp"]
+}
