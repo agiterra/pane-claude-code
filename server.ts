@@ -12,17 +12,38 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Orchestrator } from "@agiterra/pane-tools";
+import { Orchestrator, iterm } from "@agiterra/pane-tools";
+import { execSync } from "child_process";
 
 const orchestrator = new Orchestrator();
 
-// The iTerm2 session ID of the calling agent (set by iTerm2 in every session).
-// Used to split panes relative to the caller, not whatever tab is focused.
-function callerSession(): string | undefined {
-  const raw = process.env.ITERM_SESSION_ID; // format: w0t0p1:UUID
-  if (!raw) return undefined;
-  const uuid = raw.split(":")[1];
-  return uuid;
+// Resolve the caller's iTerm2 session by finding the TTY of the parent process.
+// More reliable than ITERM_SESSION_ID env var which goes stale on restart.
+let _callerSessionCache: string | undefined;
+
+async function callerSession(): Promise<string | undefined> {
+  if (_callerSessionCache) return _callerSessionCache;
+
+  // Try TTY lookup first (always current)
+  try {
+    const tty = execSync(`ps -o tty= -p ${process.ppid}`, { encoding: "utf-8" }).trim();
+    if (tty && tty !== "??") {
+      const id = await iterm.sessionIdForTty(tty);
+      if (id) {
+        _callerSessionCache = id;
+        return id;
+      }
+    }
+  } catch {}
+
+  // Fall back to env var
+  const raw = process.env.ITERM_SESSION_ID;
+  if (raw) {
+    _callerSessionCache = raw.split(":")[1];
+    return _callerSessionCache;
+  }
+
+  return undefined;
 }
 
 // --- MCP server ---
@@ -298,7 +319,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         result = { destroyed: a.name };
         break;
       case "slot_register": {
-        const itermId = callerSession();
+        const itermId = await callerSession();
         if (!itermId) throw new Error("ITERM_SESSION_ID not set — cannot register pane");
         // Auto-create tab if needed
         if (!orchestrator.store.getTab(a.tab as string)) {
@@ -312,7 +333,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           a.tab as string,
           a.name as string,
           a.position as string | undefined,
-          (a.relative_to as string) ?? callerSession(),
+          (a.relative_to as string) ?? await callerSession(),
         );
         break;
       case "slot_list":
@@ -328,7 +349,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           slot: a.slot as string | undefined,
           url: a.url as string,
           position: a.position as string | undefined,
-          relativeTo: callerSession(),
+          relativeTo: await callerSession(),
         });
         break;
       case "reconcile":
