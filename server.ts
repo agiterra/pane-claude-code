@@ -349,6 +349,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           (a.relative_to as string) ?? await callerSession(),
         );
         break;
+      case "slot_badge":
+        await orchestrator.setBadge(a.slot as string, a.text as string);
+        result = { badge_set: a.slot, text: a.text };
+        break;
       case "slot_list":
         result = orchestrator.listSlots(a.tab as string | undefined);
         break;
