@@ -159,6 +159,17 @@ const TOOLS = [
     },
   },
   {
+    name: "agent_interrupt",
+    description: "Interrupt an agent — cancels their current tool call so queued IPC messages get delivered",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "string", description: "Agent ID" },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "agent_read",
     description: "Read an agent's current screen output",
     inputSchema: {
@@ -316,6 +327,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         });
         break;
       }
+      case "agent_interrupt":
+        await orchestrator.interruptAgent(a.id as string);
+        result = { interrupted: a.id };
+        break;
       case "agent_stop":
         await orchestrator.stopAgent(a.id as string);
         result = { stopped: a.id };
