@@ -13,9 +13,13 @@ import {
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Orchestrator, iterm } from "@agiterra/pane-tools";
+import { loadOrCreateKey, register } from "@agiterra/wire-tools";
 import { execSync } from "child_process";
 
 const orchestrator = new Orchestrator();
+const CALLER_AGENT_ID =
+  process.env.PANE_AGENT_ID ?? process.env.WIRE_AGENT_ID ?? "unknown";
+let keyPair: Awaited<ReturnType<typeof loadOrCreateKey>> | null = null;
 
 // Resolve the caller's iTerm2 session by finding the TTY of the parent process.
 // More reliable than ITERM_SESSION_ID env var which goes stale on restart.
@@ -282,15 +286,31 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     let result: unknown;
 
     switch (name) {
-      case "agent_launch":
+      case "agent_launch": {
+        const agentId = a.id as string;
+        const displayName = a.name as string;
+        const wireUrl = process.env.WIRE_URL ?? "http://localhost:9800";
+
+        // Pre-register ephemeral agent on Wire using the spawning agent's key
+        if (keyPair) {
+          try {
+            const newKp = await loadOrCreateKey(agentId);
+            await register(wireUrl, agentId, displayName, newKp.publicKey, keyPair.privateKey);
+          } catch (e: any) {
+            // Non-fatal — agent may already be registered
+            console.error(`[pane] pre-register ${agentId}: ${e.message}`);
+          }
+        }
+
         result = await orchestrator.launchAgent({
-          id: a.id as string,
-          displayName: a.name as string,
+          id: agentId,
+          displayName,
           runtime: a.runtime as string | undefined,
           projectDir: a.project_dir as string | undefined,
           extraFlags: a.extra_flags as string | undefined,
         });
         break;
+      }
       case "agent_stop":
         await orchestrator.stopAgent(a.id as string);
         result = { stopped: a.id };
@@ -393,13 +413,20 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 // --- Main ---
 
 async function main(): Promise<void> {
+  // Load spawning agent's key for pre-registering ephemeral agents
+  try {
+    keyPair = await loadOrCreateKey(CALLER_AGENT_ID);
+  } catch (e) {
+    console.error(`[pane] key load failed for ${CALLER_AGENT_ID}:`, e);
+  }
+
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
 
   // Reconcile on boot
   const report = await orchestrator.reconcile();
   console.error(`[pane] boot reconcile:\n${report}`);
-  console.error("[pane] ready");
+  console.error(`[pane] ready (caller=${CALLER_AGENT_ID})`);
 }
 
 main().catch((e) => {

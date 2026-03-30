@@ -1,6 +1,6 @@
 {
   "name": "@agiterra/pane-claude-code",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Pane orchestration plugin for Claude Code \u2014 launch, manage, and monitor agents in screen sessions.",
   "license": "MIT",
   "type": "module",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@agiterra/pane-tools": "agiterra/pane-tools#v0.1.0",
+    "@agiterra/wire-tools": "/Users/tim/Projects/Agiterra/wire-tools",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
