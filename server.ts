@@ -13,7 +13,7 @@ import {
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Orchestrator, iterm } from "@agiterra/pane-tools";
-import { loadOrCreateKey, register, setPlan } from "@agiterra/wire-tools";
+import { loadOrCreateKey, generateKeyPair, exportPrivateKey, register, setPlan } from "@agiterra/wire-tools";
 import { execSync } from "child_process";
 import { join } from "path";
 
@@ -308,8 +308,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         // Pre-register ephemeral agent on Wire using the spawning agent's key
         if (!keyPair) throw new Error("no signing key — cannot pre-register agent");
 
-        // Create keypair and register on Wire
-        const newKp = await loadOrCreateKey(agentId);
+        // Generate keypair (no filesystem) and register on Wire
+        const newKp = await generateKeyPair();
         await register(wireUrl, agentId, displayName, newKp.publicKey, keyPair.privateKey);
 
         // Set initial plan if provided
@@ -317,9 +317,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           await setPlan(wireUrl, agentId, a.plan as string, newKp.privateKey);
         }
 
-        // Export private key as base64 so agent plugins can load from WIRE_PRIVATE_KEY env
-        const pkcs8 = await crypto.subtle.exportKey("pkcs8", newKp.privateKey);
-        const privateKeyB64 = Buffer.from(pkcs8).toString("base64");
+        // Export private key as base64 — orchestrator passes to agent via env
+        const privateKeyB64 = await exportPrivateKey(newKp.privateKey);
 
         result = await orchestrator.launchAgent({
           id: agentId,

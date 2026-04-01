@@ -1,6 +1,6 @@
 {
   "name": "@agiterra/pane-claude-code",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Pane orchestration plugin for Claude Code \u2014 launch, manage, and monitor agents in screen sessions.",
   "license": "MIT",
   "type": "module",
