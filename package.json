@@ -9,8 +9,8 @@
     "start": "bun install --no-summary && bun server.ts"
   },
   "dependencies": {
-    "@agiterra/crew-tools": "agiterra/pane-tools#v0.1.0",
-    "@agiterra/wire-tools": "/Users/tim/Projects/Agiterra/wire-tools",
+    "@agiterra/crew-tools": "agiterra/crew-tools",
+    "@agiterra/wire-tools": "agiterra/wire-tools",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
