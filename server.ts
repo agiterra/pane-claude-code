@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Pane orchestration plugin for Claude Code.
+ * Crew orchestration plugin for Claude Code.
  *
- * MCP adapter over pane-tools. Exposes agent lifecycle, tab/slot management,
+ * MCP adapter over crew-tools. Exposes agent lifecycle, tab/slot management,
  * and screen I/O as tools.
  */
 
@@ -12,14 +12,14 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Orchestrator, iterm } from "@agiterra/pane-tools";
+import { Orchestrator, iterm } from "@agiterra/crew-tools";
 import { generateKeyPair, exportPrivateKey, register, setPlan } from "@agiterra/wire-tools";
 import { execSync } from "child_process";
 import { join } from "path";
 
 const orchestrator = new Orchestrator();
 const CALLER_AGENT_ID =
-  process.env.PANE_AGENT_ID ?? process.env.WIRE_AGENT_ID ?? "unknown";
+  process.env.CREW_AGENT_ID ?? process.env.WIRE_AGENT_ID ?? "unknown";
 let keyPair: { publicKey: string; privateKey: CryptoKey } | null = null;
 
 // Resolve the caller's iTerm2 session by finding the TTY of the parent process.
@@ -54,11 +54,11 @@ async function callerSession(): Promise<string | undefined> {
 // --- MCP server ---
 
 const mcp = new Server(
-  { name: "pane", version: "0.1.0" },
+  { name: "crew", version: "0.1.0" },
   {
     capabilities: { tools: {} },
     instructions:
-      "Agent pane orchestrator. Launch agents in persistent screen sessions, " +
+      "Agent crew orchestrator. Launch agents in persistent screen sessions, " +
       "manage tabs and slots (iTerm2 panes), attach/detach agents, read/send " +
       "to agent screens. Agents survive terminal crashes and run whether or not " +
       "they're attached to a visible pane.",
@@ -449,10 +449,10 @@ async function main(): Promise<void> {
       const publicKey = pubB64 + "=".repeat((4 - (pubB64.length % 4)) % 4);
       keyPair = { publicKey, privateKey };
     } catch (e) {
-      console.error(`[pane] failed to load WIRE_PRIVATE_KEY:`, e);
+      console.error(`[crew] failed to load WIRE_PRIVATE_KEY:`, e);
     }
   } else {
-    console.error("[pane] WIRE_PRIVATE_KEY not set — pre-registration disabled");
+    console.error("[crew] WIRE_PRIVATE_KEY not set — pre-registration disabled");
   }
 
   const transport = new StdioServerTransport();
@@ -460,11 +460,11 @@ async function main(): Promise<void> {
 
   // Reconcile on boot
   const report = await orchestrator.reconcile();
-  console.error(`[pane] boot reconcile:\n${report}`);
-  console.error(`[pane] ready (caller=${CALLER_AGENT_ID})`);
+  console.error(`[crew] boot reconcile:\n${report}`);
+  console.error(`[crew] ready (caller=${CALLER_AGENT_ID})`);
 }
 
 main().catch((e) => {
-  console.error("[pane] fatal:", e);
+  console.error("[crew] fatal:", e);
   process.exit(1);
 });
