@@ -2,7 +2,7 @@
 /**
  * Crew orchestration plugin for Claude Code.
  *
- * MCP adapter over crew-tools. Exposes agent lifecycle, tab/slot management,
+ * MCP adapter over crew-tools. Exposes agent lifecycle, tab/pane management,
  * and screen I/O as tools.
  */
 
@@ -24,29 +24,25 @@ let keyPair: { publicKey: string; privateKey: CryptoKey } | null = null;
 
 // Resolve the caller's iTerm2 session by finding the TTY of the parent process.
 // More reliable than ITERM_SESSION_ID env var which goes stale on restart.
-let _callerSessionCache: string | undefined;
-
+/**
+ * Resolve the caller's iTerm2 session ID.
+ * No caching — the session can change after screen detach/reattach.
+ */
 async function callerSession(): Promise<string | undefined> {
-  if (_callerSessionCache) return _callerSessionCache;
-
   // Try TTY lookup first (always current)
   try {
     const tty = execSync(`ps -o tty= -p ${process.ppid}`, { encoding: "utf-8" }).trim();
     if (tty && tty !== "??") {
       const id = await iterm.sessionIdForTty(tty);
-      if (id) {
-        _callerSessionCache = id;
-        return id;
-      }
+      if (id) return id;
     }
-  } catch {}
-
-  // Fall back to env var
-  const raw = process.env.ITERM_SESSION_ID;
-  if (raw) {
-    _callerSessionCache = raw.split(":")[1];
-    return _callerSessionCache;
+  } catch (e) {
+    console.error(`[crew] TTY lookup failed for ppid ${process.ppid}:`, e);
   }
+
+  // Fall back to env var (may be stale for long-running screen sessions)
+  const raw = process.env.ITERM_SESSION_ID;
+  if (raw) return raw.split(":")[1];
 
   return undefined;
 }
@@ -54,14 +50,25 @@ async function callerSession(): Promise<string | undefined> {
 // --- MCP server ---
 
 const mcp = new Server(
-  { name: "crew", version: "0.1.0" },
+  { name: "crew", version: "0.2.0" },
   {
     capabilities: { tools: {} },
     instructions:
-      "Agent crew orchestrator. Launch agents in persistent screen sessions, " +
-      "manage tabs and slots (iTerm2 panes), attach/detach agents, read/send " +
-      "to agent screens. Agents survive terminal crashes and run whether or not " +
-      "they're attached to a visible pane.",
+      "Crew manages agents across three independent layers:\n" +
+      "- AGENT = the full stack: identity + CC session + CC process + screen. 1:1:1:1. Survives pane closes and terminal crashes.\n" +
+      "- PANE = an iTerm2 pane. A viewport — nothing more. Think of panes as conference rooms.\n" +
+      "- TAB = an iTerm2 tab containing a layout of panes.\n\n" +
+      "Agents and panes are independent. An agent can run without a pane (headless), " +
+      "and a pane can exist without an agent (empty shell). " +
+      "`agent_attach` connects an agent's screen to a pane. `agent_detach` disconnects without stopping the agent.\n\n" +
+      "Standard sequence: agent_launch → pane_create → agent_attach → agent_send '\\r' (confirm dev-channel prompt).\n\n" +
+      "RULES:\n" +
+      "- Name panes by position or purpose (e.g. 'engineering-nw', 'oak', 'review-left'), NOT by agent name. " +
+      "Agents don't own rooms — they sit in them.\n" +
+      "- To close a pane you no longer need: agent_detach first (if occupied), then pane_close.\n" +
+      "- To stop watching an agent without closing the pane: agent_detach.\n" +
+      "- To kill an agent: agent_stop (screen dies, pane stays). Then pane_close if you want the pane gone too.\n" +
+      "- NEVER close a pane you are sitting in — it will kill your process.",
   },
 );
 
@@ -70,7 +77,7 @@ const mcp = new Server(
 const TOOLS = [
   {
     name: "agent_launch",
-    description: "Launch an agent in a persistent screen session",
+    description: "Launch an agent in a persistent screen session (runs headless until attached to a pane)",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -86,8 +93,21 @@ const TOOLS = [
     },
   },
   {
+    name: "agent_register",
+    description: "Register yourself as a crew agent. Call this on boot if you're running in a screen session. Auto-links to your pane if one exists with the same name.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "string", description: "Agent ID (your Wire agent name)" },
+        name: { type: "string", description: "Display name" },
+        runtime: { type: "string", description: "Runtime: claude-code, codex, etc. Default: claude-code" },
+      },
+      required: ["id", "name"],
+    },
+  },
+  {
     name: "agent_stop",
-    description: "Stop an agent (kills screen session)",
+    description: "Stop an agent (kills the screen session). The pane stays open — use pane_close separately if you want the pane gone too.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -98,24 +118,24 @@ const TOOLS = [
   },
   {
     name: "agent_list",
-    description: "List all agents with status, slot, and runtime",
+    description: "List all agents with status, pane, and runtime",
     inputSchema: { type: "object" as const, properties: {} },
   },
   {
     name: "agent_attach",
-    description: "Attach an agent to a slot (make visible in a pane)",
+    description: "Attach an agent's screen session to a pane, making it visible. If another agent occupies the pane, it is detached first.",
     inputSchema: {
       type: "object" as const,
       properties: {
         id: { type: "string", description: "Agent ID" },
-        slot: { type: "string", description: "Slot name" },
+        pane: { type: "string", description: "Pane name" },
       },
-      required: ["id", "slot"],
+      required: ["id", "pane"],
     },
   },
   {
     name: "agent_detach",
-    description: "Detach an agent from its slot (keeps running in background)",
+    description: "Detach an agent from its pane. The agent keeps running headless in its screen session. The pane stays open with an empty shell. Use this to free a pane without stopping the agent.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -126,19 +146,19 @@ const TOOLS = [
   },
   {
     name: "agent_move",
-    description: "Move an agent to a different slot",
+    description: "Move an agent to a different pane",
     inputSchema: {
       type: "object" as const,
       properties: {
         id: { type: "string", description: "Agent ID" },
-        slot: { type: "string", description: "Target slot name" },
+        pane: { type: "string", description: "Target pane name" },
       },
-      required: ["id", "slot"],
+      required: ["id", "pane"],
     },
   },
   {
     name: "agent_swap",
-    description: "Swap two agents' slots",
+    description: "Swap two agents' panes",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -150,12 +170,12 @@ const TOOLS = [
   },
   {
     name: "agent_send",
-    description: "Send keystrokes to an agent's screen session",
+    description: "Send keystrokes to an agent's screen session. Works whether the agent is attached to a pane or running headless.",
     inputSchema: {
       type: "object" as const,
       properties: {
         id: { type: "string", description: "Agent ID" },
-        text: { type: "string", description: "Text to send (include \\n for enter)" },
+        text: { type: "string", description: "Text to send (use \\r for enter in screen sessions)" },
       },
       required: ["id", "text"],
     },
@@ -174,7 +194,7 @@ const TOOLS = [
   },
   {
     name: "agent_read",
-    description: "Read an agent's current screen output",
+    description: "Read an agent's current screen output. Works whether the agent is attached to a pane or running headless.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -185,11 +205,12 @@ const TOOLS = [
   },
   {
     name: "tab_create",
-    description: "Create a named tab (workstream container)",
+    description: "Create a named tab (iTerm2 tab — a container for panes). Optionally set a theme for auto-naming panes.",
     inputSchema: {
       type: "object" as const,
       properties: {
         name: { type: "string", description: "Tab name" },
+        theme: { type: "string", description: "Pane naming theme: trees, rivers, stones, peaks, spices. Panes created without a name get one from this pool." },
       },
       required: ["name"],
     },
@@ -201,7 +222,7 @@ const TOOLS = [
   },
   {
     name: "tab_destroy",
-    description: "Destroy a tab and its slots",
+    description: "Destroy a tab and all its panes. Agents in those panes are detached (keep running headless). NEVER destroy a tab containing a pane you are sitting in.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -211,46 +232,58 @@ const TOOLS = [
     },
   },
   {
-    name: "slot_register",
-    description: "Register your own iTerm2 pane as a named slot (uses your ITERM_SESSION_ID)",
+    name: "pane_register",
+    description: "Register your own iTerm2 pane. Call this at session start so other agents can split relative to your pane. If no name is given, one is auto-assigned from the tab's theme.",
     inputSchema: {
       type: "object" as const,
       properties: {
         tab: { type: "string", description: "Tab name (created if missing)" },
-        name: { type: "string", description: "Slot name for your pane" },
+        name: { type: "string", description: "Pane name (optional — auto-assigned from tab theme if omitted)" },
       },
-      required: ["tab", "name"],
+      required: ["tab"],
     },
   },
   {
-    name: "slot_create",
-    description: "Create a named slot by splitting an iTerm2 pane",
+    name: "pane_create",
+    description: "Create a pane by splitting an existing iTerm2 pane. If no name is given, one is auto-assigned from the tab's theme.",
     inputSchema: {
       type: "object" as const,
       properties: {
         tab: { type: "string", description: "Tab name" },
-        name: { type: "string", description: "Slot name" },
+        name: { type: "string", description: "Pane name (optional — auto-assigned from tab theme if omitted)" },
         position: { type: "string", description: "Split direction: below (default), right, left, above" },
-        relative_to: { type: "string", description: "Slot name or session UUID to split from (default: caller's pane)" },
+        relative_to: { type: "string", description: "Pane name or session UUID to split from (default: caller's pane)" },
       },
-      required: ["tab", "name"],
+      required: ["tab"],
     },
   },
   {
-    name: "slot_badge",
-    description: "Set the iTerm2 badge on a slot's pane (overlay text in corner)",
+    name: "pane_send",
+    description: "Send keystrokes to a pane's iTerm2 session. Works whether or not an agent is attached.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        slot: { type: "string", description: "Slot name" },
-        text: { type: "string", description: "Badge text (e.g. 'ENG-1234\\nsoil-app PR #42')" },
+        pane: { type: "string", description: "Pane name" },
+        text: { type: "string", description: "Text to send" },
       },
-      required: ["slot", "text"],
+      required: ["pane", "text"],
     },
   },
   {
-    name: "slot_list",
-    description: "List all slots, optionally filtered by tab",
+    name: "pane_badge",
+    description: "Set the iTerm2 badge on a pane (overlay text in corner)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pane: { type: "string", description: "Pane name" },
+        text: { type: "string", description: "Badge text (e.g. 'ENG-1234\\nsoil-app PR #42')" },
+      },
+      required: ["pane", "text"],
+    },
+  },
+  {
+    name: "pane_list",
+    description: "List all panes, optionally filtered by tab",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -259,12 +292,12 @@ const TOOLS = [
     },
   },
   {
-    name: "slot_destroy",
-    description: "Destroy a slot (closes iTerm2 pane, detaches any agent first)",
+    name: "pane_close",
+    description: "Close a pane (closes the iTerm2 pane and removes it). Detaches any agent first (agent keeps running headless). NEVER close a pane you are sitting in. To stop watching an agent without closing the pane, use agent_detach instead.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        name: { type: "string", description: "Slot name" },
+        name: { type: "string", description: "Pane name" },
       },
       required: ["name"],
     },
@@ -276,10 +309,10 @@ const TOOLS = [
       type: "object" as const,
       properties: {
         tab: { type: "string", description: "Tab name (must exist)" },
-        slot: { type: "string", description: "Slot name (auto-generated if omitted)" },
+        pane: { type: "string", description: "Pane name (auto-generated if omitted)" },
         url: { type: "string", description: "URL to open" },
         position: { type: "string", description: "Split direction: below (default), right" },
-        relative_to: { type: "string", description: "Slot name to split from (default: caller's pane)" },
+        relative_to: { type: "string", description: "Pane name to split from (default: caller's pane)" },
       },
       required: ["tab", "url"],
     },
@@ -306,20 +339,31 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const displayName = a.name as string;
         const wireUrl = process.env.WIRE_URL ?? "http://localhost:9800";
 
-        // Pre-register ephemeral agent on Wire using the spawning agent's key
-        if (!keyPair) throw new Error("no signing key — cannot pre-register agent");
+        // Check if agent already exists on Wire (permanent agents manage their own keys)
+        let privateKeyB64: string | undefined;
+        const agentsRes = await fetch(`${wireUrl}/agents`);
+        const agents = await agentsRes.json() as any[];
+        const existing = agents.find((ag: any) => ag.id === agentId);
 
-        // Generate keypair (no filesystem) and register on Wire
-        const newKp = await generateKeyPair();
-        await register(wireUrl, CALLER_AGENT_ID, agentId, displayName, newKp.publicKey, keyPair.privateKey);
+        if (existing?.permanent) {
+          // Permanent agent — don't pre-register, don't generate keys.
+          // Agent has its own key in .env and is already registered.
+          if (a.plan && keyPair) {
+            // Set plan using caller's key on behalf of the agent won't work —
+            // the agent will set its own plan after boot.
+          }
+        } else {
+          // Ephemeral agent — pre-register on Wire using the spawning agent's key
+          if (!keyPair) throw new Error("no signing key — cannot pre-register agent");
+          const newKp = await generateKeyPair();
+          await register(wireUrl, CALLER_AGENT_ID, agentId, displayName, newKp.publicKey, keyPair.privateKey);
 
-        // Set initial plan if provided
-        if (a.plan) {
-          await setPlan(wireUrl, agentId, a.plan as string, newKp.privateKey);
+          if (a.plan) {
+            await setPlan(wireUrl, agentId, a.plan as string, newKp.privateKey);
+          }
+
+          privateKeyB64 = await exportPrivateKey(newKp.privateKey);
         }
-
-        // Export private key as base64 — orchestrator passes to agent via env
-        const privateKeyB64 = await exportPrivateKey(newKp.privateKey);
 
         result = await orchestrator.launchAgent({
           id: agentId,
@@ -332,6 +376,14 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         });
         break;
       }
+      case "agent_register":
+        result = await orchestrator.registerAgent({
+          id: a.id as string,
+          displayName: a.name as string,
+          runtime: a.runtime as string | undefined,
+          callerItermId: await callerSession(),
+        });
+        break;
       case "agent_interrupt":
         result = await orchestrator.interruptAgent(a.id as string, !!a.background);
         break;
@@ -343,16 +395,16 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         result = orchestrator.listAgents();
         break;
       case "agent_attach":
-        await orchestrator.attachAgent(a.id as string, a.slot as string);
-        result = { attached: a.id, slot: a.slot };
+        await orchestrator.attachAgent(a.id as string, a.pane as string);
+        result = { attached: a.id, pane: a.pane };
         break;
       case "agent_detach":
         await orchestrator.detachAgent(a.id as string);
         result = { detached: a.id };
         break;
       case "agent_move":
-        await orchestrator.moveAgent(a.id as string, a.slot as string);
-        result = { moved: a.id, slot: a.slot };
+        await orchestrator.moveAgent(a.id as string, a.pane as string);
+        result = { moved: a.id, pane: a.pane };
         break;
       case "agent_swap":
         await orchestrator.swapAgents(a.id_a as string, a.id_b as string);
@@ -366,7 +418,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         result = { output: await orchestrator.readAgent(a.id as string) };
         break;
       case "tab_create":
-        result = orchestrator.createTab(a.name as string);
+        result = orchestrator.createTab(a.name as string, a.theme as string | undefined);
         break;
       case "tab_list":
         result = orchestrator.listTabs();
@@ -375,39 +427,43 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         orchestrator.deleteTab(a.name as string);
         result = { destroyed: a.name };
         break;
-      case "slot_register": {
+      case "pane_register": {
         const itermId = await callerSession();
-        if (!itermId) throw new Error("ITERM_SESSION_ID not set — cannot register pane");
+        if (!itermId) throw new Error("cannot detect iTerm2 session — are you running in iTerm2?");
         // Auto-create tab if needed
         if (!orchestrator.store.getTab(a.tab as string)) {
           orchestrator.createTab(a.tab as string);
         }
-        result = orchestrator.registerSlot(a.tab as string, a.name as string, itermId);
+        result = await orchestrator.registerPane(a.tab as string, a.name as string | undefined, itermId);
         break;
       }
-      case "slot_create":
-        result = await orchestrator.createSlot(
+      case "pane_create":
+        result = await orchestrator.createPane(
           a.tab as string,
-          a.name as string,
+          a.name as string | undefined,
           a.position as string | undefined,
           (a.relative_to as string) ?? await callerSession(),
         );
         break;
-      case "slot_badge":
-        await orchestrator.setBadge(a.slot as string, a.text as string);
-        result = { badge_set: a.slot, text: a.text };
+      case "pane_send":
+        await orchestrator.sendToPane(a.pane as string, a.text as string);
+        result = { sent: true, pane: a.pane };
         break;
-      case "slot_list":
-        result = orchestrator.listSlots(a.tab as string | undefined);
+      case "pane_badge":
+        await orchestrator.setBadge(a.pane as string, a.text as string);
+        result = { badge_set: a.pane, text: a.text };
         break;
-      case "slot_destroy":
-        await orchestrator.deleteSlot(a.name as string);
-        result = { destroyed: a.name };
+      case "pane_list":
+        result = orchestrator.listPanes(a.tab as string | undefined);
+        break;
+      case "pane_close":
+        await orchestrator.closePane(a.name as string, await callerSession());
+        result = { closed: a.name };
         break;
       case "url_open":
         result = await orchestrator.openUrl({
           tab: a.tab as string,
-          slot: a.slot as string | undefined,
+          pane: a.pane as string | undefined,
           url: a.url as string,
           position: a.position as string | undefined,
           relativeTo: (a.relative_to as string) ?? await callerSession(),

@@ -1,6 +1,6 @@
 {
   "name": "@agiterra/crew-claude-code",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "Crew orchestration plugin for Claude Code — launch, manage, and monitor agents in screen sessions.",
   "license": "MIT",
   "type": "module",
@@ -8,6 +8,10 @@
   "scripts": {
     "start": "bun install --no-summary && bun server.ts"
   },
+  "files": [
+    "skills/",
+    ".claude-plugin/"
+  ],
   "dependencies": {
     "@agiterra/crew-tools": "agiterra/crew-tools",
     "@agiterra/wire-tools": "agiterra/wire-tools",

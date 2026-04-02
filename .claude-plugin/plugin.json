@@ -2,5 +2,6 @@
   "name": "crew",
   "description": "Crew orchestration — launch and manage agents in persistent screen sessions.",
   "version": "0.5.4",
-  "keywords": ["crew", "agent", "screen", "orchestration", "mcp"]
+  "keywords": ["crew", "agent", "screen", "orchestration", "mcp"],
+  "skills": "./skills/"
 }
