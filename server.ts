@@ -323,6 +323,29 @@ const TOOLS = [
     },
   },
   {
+    name: "theme_update",
+    description: "Update a theme's blend (opacity), mode, or images, then rebuild all live panes using that theme. Changes persist in theme.json.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        theme: { type: "string", description: "Theme name (e.g. 'trees', 'cities')" },
+        blend: { type: "number", description: "Background blend/opacity (0 = invisible, 1 = fully opaque). Default: 0.5" },
+        mode: { type: "number", description: "iTerm2 background image mode (0=tile, 1=stretch, 2=scale-to-fill)" },
+        images: {
+          type: "object",
+          description: "Map of pane name → image filename to update (e.g. {\"oak\": \"oak-v2.jpg\"})",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["theme"],
+    },
+  },
+  {
+    name: "theme_list",
+    description: "List installed themes with pool coverage (how many names have images)",
+    inputSchema: { type: "object" as const, properties: {} },
+  },
+  {
     name: "reconcile",
     description: "Sync DB state with running screen sessions. Run on boot or to check health.",
     inputSchema: { type: "object" as const, properties: {} },
@@ -475,6 +498,35 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           relativeTo: (a.relative_to as string) ?? await callerSession(),
         });
         break;
+      case "theme_update": {
+        const updates: { blend?: number; mode?: number; images?: Record<string, string> } = {};
+        if (a.blend !== undefined) updates.blend = a.blend as number;
+        if (a.mode !== undefined) updates.mode = a.mode as number;
+        if (a.images) updates.images = a.images as Record<string, string>;
+        result = await orchestrator.updateThemeAndRebuild(a.theme as string, updates);
+        break;
+      }
+      case "theme_list": {
+        const { listThemes, loadTheme, resolveThemeDir } = await import("@agiterra/crew-tools");
+        const themes = listThemes();
+        const info = themes.map((name) => {
+          const config = loadTheme(name);
+          const dir = resolveThemeDir(name);
+          const imageCount = config ? Object.keys(config.background.images).length : 0;
+          const poolSize = config?.pool.length ?? 0;
+          return {
+            name,
+            dir,
+            pool: poolSize,
+            images: imageCount,
+            coverage: poolSize > 0 ? `${imageCount}/${poolSize}` : "no pool",
+            blend: config?.background.blend,
+            mode: config?.background.mode,
+          };
+        });
+        result = info;
+        break;
+      }
       case "reconcile":
         result = { report: await orchestrator.reconcile() };
         break;
