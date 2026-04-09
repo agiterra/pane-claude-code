@@ -447,7 +447,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         result = { output: await orchestrator.readAgent(a.id as string, a.cc_session_id as string | undefined) };
         break;
       case "tab_create":
-        result = orchestrator.createTab(a.name as string, a.theme as string | undefined);
+        result = await orchestrator.createTab(a.name as string, a.theme as string | undefined);
         break;
       case "tab_list":
         result = orchestrator.listTabs();
