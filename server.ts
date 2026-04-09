@@ -13,7 +13,7 @@ import {
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Orchestrator, iterm } from "@agiterra/crew-tools";
-import { generateKeyPair, exportPrivateKey, register, setPlan } from "@agiterra/wire-tools";
+import { generateKeyPair, exportPrivateKey, importKeyPair, register, setPlan } from "@agiterra/wire-tools";
 import { execSync } from "child_process";
 import { join } from "path";
 
@@ -555,13 +555,7 @@ async function main(): Promise<void> {
   const rawKey = process.env.WIRE_PRIVATE_KEY;
   if (rawKey) {
     try {
-      const pkcs8 = Uint8Array.from(atob(rawKey), (c) => c.charCodeAt(0));
-      const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8, "Ed25519", true, ["sign"]);
-      const jwk = await crypto.subtle.exportKey("jwk", privateKey);
-      const pubB64Url = jwk.x!;
-      const pubB64 = pubB64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const publicKey = pubB64 + "=".repeat((4 - (pubB64.length % 4)) % 4);
-      keyPair = { publicKey, privateKey };
+      keyPair = await importKeyPair(rawKey);
     } catch (e) {
       console.error(`[crew] failed to load WIRE_PRIVATE_KEY:`, e);
     }
