@@ -1,7 +1,7 @@
 {
   "name": "crew",
   "description": "Crew orchestration — launch and manage agents in persistent screen sessions.",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "keywords": ["crew", "agent", "screen", "orchestration", "mcp"],
   "skills": "./skills/",
   "postInstall": "bun install --frozen-lockfile",
