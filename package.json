@@ -10,6 +10,7 @@
   },
   "files": [
     "skills/",
+    "hooks/",
     ".claude-plugin/"
   ],
   "dependencies": {
