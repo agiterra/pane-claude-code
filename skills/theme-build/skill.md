@@ -6,7 +6,8 @@ allowed-tools: Agent, Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
 # Theme Builder
 
 Build or complete a Crew pane theme. Themes define a name pool and background
-images for iTerm2 panes.
+images for terminal panes (background images are used by iTerm2; cmux uses
+sidebar metadata instead).
 
 ## Usage
 

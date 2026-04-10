@@ -13,7 +13,7 @@
     ".claude-plugin/"
   ],
   "dependencies": {
-    "@agiterra/crew-tools": "agiterra/crew-tools#v0.17.0",
+    "@agiterra/crew-tools": "agiterra/crew-tools#feat/cmux-backend",
     "@agiterra/wire-tools": "agiterra/wire-tools#v0.12.0",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
