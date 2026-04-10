@@ -85,3 +85,52 @@ Prefer these free sources (in order):
 - Always verify downloaded files are valid JPEGs (`file <path>` should say "JPEG image data")
 - Delete and retry if a download produces HTML instead of an image
 - After completing, show a summary of pool coverage: N/M names have images
+
+## Badge Colors (per image)
+
+For each downloaded image, choose a badge color that will be readable when
+displayed in the **top-right corner** of the pane. The background image is
+scaled to fill (mode 2), so the visible top-right region depends on pane
+aspect ratio but generally shows the top-right ~25% of the image.
+
+1. Sample the top-right region of each image to understand its dominant colors.
+   You can use `sips` to crop and inspect:
+   ```bash
+   sips -c 270 480 --cropOffset 0 1440 <image> --out /tmp/tr.jpg
+   sips -g all /tmp/tr.jpg
+   ```
+   Or use ImageMagick `identify -format '%[pixel:p{1800,50}]' <image>` to pick
+   a sample pixel.
+
+2. Pick a badge color that has **high contrast with both**:
+   - The dominant color of the top-right region of the background image
+   - The terminal's foreground text color (typically near-white / light gray)
+
+   The badge overlays the terminal text area, so it must be readable against
+   the BLENDED result: background image (top-right crop) × 0.5 opacity +
+   dark terminal background, with white terminal text possibly passing through.
+
+   Avoid:
+   - **Red** (operator preference)
+   - **Pure white / very light colors** (collide with terminal text)
+   - **Very dark colors** (disappear into dark terminal)
+
+   Good choices are mid-saturation warm tones: amber, gold, burnt orange,
+   olive, teal, or saturated mid-tone blues/greens that differ from the
+   image's dominant hue.
+
+   Use alpha 0.85 for slight transparency.
+
+3. Write the chosen color into `theme.json` under `badgeColors[<name>]`:
+   ```json
+   {
+     "badgeColors": {
+       "oak": { "r": 1, "g": 0.85, "b": 0.3, "a": 0.85 },
+       "marble": { "r": 0.2, "g": 0.3, "b": 0.6, "a": 0.85 }
+     }
+   }
+   ```
+   Components are 0..1 floats. Alpha defaults to 0.85 if omitted.
+
+4. Optionally set `defaultBadgeColor` as a fallback for any pane without a
+   specific entry.
