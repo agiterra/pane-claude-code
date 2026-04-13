@@ -2,22 +2,24 @@
   "hooks": {
     "Notification": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "if command -v cmux >/dev/null 2>&1 || [ -x /Applications/cmux.app/Contents/Resources/bin/cmux ]; then PATH=\"/Applications/cmux.app/Contents/Resources/bin:$PATH\" cmux claude-hook notification 2>/dev/null; fi",
-            "timeout": 3000
+            "timeout": 500
           }
         ]
       }
     ],
     "Stop": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "if command -v cmux >/dev/null 2>&1 || [ -x /Applications/cmux.app/Contents/Resources/bin/cmux ]; then PATH=\"/Applications/cmux.app/Contents/Resources/bin:$PATH\" cmux claude-hook stop 2>/dev/null; fi",
-            "timeout": 3000
+            "timeout": 500
           }
         ]
       }
