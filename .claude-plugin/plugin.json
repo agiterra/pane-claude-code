@@ -1,7 +1,7 @@
 {
   "name": "crew",
   "description": "Crew orchestration — launch and manage agents in persistent screen sessions. Supports cmux and iTerm2.",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "keywords": ["crew", "agent", "screen", "orchestration", "mcp", "cmux"],
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
