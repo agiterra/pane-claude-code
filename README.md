@@ -99,7 +99,6 @@ export CREW_TERMINAL=iterm  # Force iTerm2 backend
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `CREW_TERMINAL` | auto-detect | Terminal backend: `cmux` or `iterm` |
-| `CREW_NOTIFY` | `0` (off) | Set to `1` to forward Claude Code Notification/Stop events to cmux (macOS banners). Off by default since v1.2.3 — opt in only if you want the dings. |
 | `WIRE_URL` | `http://localhost:9800` | Wire server URL (for agent identity) |
 | `WIRE_PRIVATE_KEY` | — | Ed25519 private key for agent registration |
 
@@ -107,16 +106,7 @@ No env vars are required for basic local use. Wire integration enables inter-age
 
 ### Notifications
 
-Crew ships `Notification` and `Stop` hooks that can forward Claude Code's "waiting for input" and "agent stopped" events to cmux, which produces macOS notification banners. This is **off by default** as of v1.2.3 — operators managing multiple agents typically find the stream of banners more noise than signal.
-
-To enable, export `CREW_NOTIFY=1` before launching the agent:
-
-```bash
-# In your shell rc, or per-agent .env file:
-export CREW_NOTIFY=1
-```
-
-Requires cmux on `PATH` (the hook is a no-op otherwise).
+Crew ships `Notification` and `Stop` hooks that forward Claude Code's "waiting for input" and "agent stopped" events to cmux, producing macOS notification banners. To silence them, disable the hooks in your Claude Code settings or uninstall cmux. Requires cmux on `PATH` (the hook is a no-op otherwise).
 
 ## Architecture
 
