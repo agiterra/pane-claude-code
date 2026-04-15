@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if command -v cmux >/dev/null 2>&1 || [ -x /Applications/cmux.app/Contents/Resources/bin/cmux ]; then PATH=\"/Applications/cmux.app/Contents/Resources/bin:$PATH\" cmux claude-hook notification 2>/dev/null || true; fi",
+            "command": "if [ \"${CREW_NOTIFY:-0}\" != \"1\" ]; then exit 0; fi; if command -v cmux >/dev/null 2>&1 || [ -x /Applications/cmux.app/Contents/Resources/bin/cmux ]; then PATH=\"/Applications/cmux.app/Contents/Resources/bin:$PATH\" cmux claude-hook notification 2>/dev/null || true; fi",
             "timeout": 500
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if command -v cmux >/dev/null 2>&1 || [ -x /Applications/cmux.app/Contents/Resources/bin/cmux ]; then PATH=\"/Applications/cmux.app/Contents/Resources/bin:$PATH\" cmux claude-hook stop 2>/dev/null || true; fi",
+            "command": "if [ \"${CREW_NOTIFY:-0}\" != \"1\" ]; then exit 0; fi; if command -v cmux >/dev/null 2>&1 || [ -x /Applications/cmux.app/Contents/Resources/bin/cmux ]; then PATH=\"/Applications/cmux.app/Contents/Resources/bin:$PATH\" cmux claude-hook stop 2>/dev/null || true; fi",
             "timeout": 500
           }
         ]
