@@ -1,7 +1,7 @@
 {
   "name": "crew",
   "description": "Crew orchestration — launch and manage agents in persistent screen sessions. Supports cmux and iTerm2.",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "keywords": ["crew", "agent", "screen", "orchestration", "mcp", "cmux"],
   "skills": "./skills/",
   "postInstall": "bash ensure-bun.sh && bun install --frozen-lockfile",
